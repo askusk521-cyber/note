@@ -1,0 +1,255 @@
+\documentclass[11pt, a4paper, fontset=none]{ctexart}
+
+% ---- 字体 ----
+\setCJKmainfont{Noto Sans CJK SC}
+\setCJKsansfont{Noto Sans CJK SC}
+\setmainfont{Noto Sans CJK SC}
+\setsansfont{Noto Sans CJK SC}
+
+% ---- 页面与配色 ----
+\usepackage[a4paper, margin=2.4cm]{geometry}
+\usepackage{xcolor, amsmath, amssymb, mathtools}
+\definecolor{accent}{HTML}{2C5F8A}
+\definecolor{soft}{HTML}{E8EEF4}
+\definecolor{key}{HTML}{C0392B}
+\usepackage{titlesec, booktabs, enumitem, tcolorbox, fancyhdr}
+
+\titleformat{\section}
+  {\Large\bfseries\color{accent}}{\thesection}{0.6em}{}[{\color{accent}\titlerule[0.8pt]}]
+\titleformat{\subsection}
+  {\large\bfseries\color{accent!80}}{\thesubsection}{0.5em}{}
+
+% 口播框
+\newtcolorbox{say}[1][]{colback=soft, colframe=accent, arc=2mm,
+  left=8pt, right=8pt, top=6pt, bottom=6pt,
+  fonttitle=\bfseries\color{accent},
+  title={#1}, #1}
+\newcommand{\hl}[1]{{\color{key}\bfseries #1}}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{gray}FNO 在 DFT 中的应用 · 组会讲稿}
+\fancyhead[R]{\small\color{gray}\thepage}
+\fancyfoot[C]{\small\color{gray}2026.9.18}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\begin{document}
+
+% ===== 封面 =====
+\begin{center}
+  {\Huge\bfseries\color{accent} FNO 在 DFT 中的应用}\\[6pt]
+  {\Large Kohn--Sham FNO}\\[10pt]
+  {\normalsize 2026.9.18 组会分享}\\[4pt]
+  {\small\color{gray} 论文：\textit{Learning the Kohn--Sham map with neural operators for quasi-linear scaling density functional theory}（Caltech, Anandkumar 组, 2026-08）}
+\end{center}
+\vspace{6pt}
+\begin{say}{开场（30 秒，对着封面讲）}
+大家好，今天我组会分享一篇 Caltech Anandkumar 组今年 8 月的文章，标题是“用神经算子学 Kohn--Sham 映射，实现准线性标度的 DFT”。
+
+一句话先给大家一个印象：传统 DFT 每一步都要做一次“对角化”，它随电子数\hl{立方}增长，是几十年的天花板。这篇论文用一个神经网络算子（FNO）\hl{把对角化那一步替掉}，让计算变成\hl{准线性}，最后在一块 GPU 上收敛了 8 万个电子的镁位错。
+
+我今天的讲法分三段：先讲清楚这里的量子化学原理（什么是 DFT、为什么会有对角化），再讲什么是 FNO，最后讲这篇论文具体是怎么做到、效果如何。我们开始。
+\end{say}
+
+% ===== SLIDE 2 =====
+\section{什么是量子化学计算，以及 Hohenberg–Kohn 定理}\label{sec:s2}
+
+\begin{say}{这一页怎么讲}
+先说我们到底在算什么。化学、材料里一个最基础的问题：\textbf{给一堆原子核，它们的电子排成什么样、总能量是多少？}因为材料能不能导电、键有多强、熔点多少，几乎都能从“电子排布 + 总能量”推出来。
+
+那为什么难？最“正确”的写法，是要同时盯住\textbf{每一个电子}的位置。$N$ 个电子就是 $3N$ 个变量，这叫波函数。两个电子才 6 维，几百个电子就是几百维——要在几百维空间里找最小值，存储和计算都是\hl{指数级爆炸}。这就是为什么电子结构算大体系一直卡着。
+
+量子化学在 1964 年有个改变游戏规则的想法：\textbf{也许不用那几百维的波函数，一张 3 维的“电子密度”就够了。}密度 $n(\mathbf r)$ 就是“空间每个点上电子多不多”的一张热力图。固定分辨率下，它的网格点数只随\textbf{体积线性}增长，不再随电子数指数增长。
+
+为什么这合法？靠 Hohenberg–Kohn 定理，就两条，大家记这两条就行：
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{基态能量由密度唯一决定}——给定原子核布局，密度一定，总能量就定了；
+  \item \textbf{基态密度 = 让总能量泛函最小的那个密度}——也就是去“最小化”一个关于密度的函数 $E[n]$。
+\end{enumerate}
+
+这里插一句“泛函”：普通函数是“吃一个数、吐一个数”，泛函是\hl{“吃一整个函数、吐一个数”}——吃一张密度图，吐一个总能量。
+
+那问题就变成：去最小化 $E[n]$ 这个 3 维的东西，比最小化几百维的波函数容易多了。\textbf{但是}——HK 定理只告诉你 $E[n]$ 存在、最小化它就对，\hl{没告诉你它具体长什么样}。这个泛函里有一块我们根本解不出来，就是页面上写的“电子之间的交换关联作用”。所以还得有一个工程化的把戏——这就引出下一页的 Kohn–Sham 方程。
+\end{say}
+
+\begin{say}[title={这一页的关键词（如果被打断，回扣这三点）}]
+\textbf{密度 $n(\mathbf r)$ 是主角}；\textbf{HK 定理 = 能量由密度唯一决定 + 基态密度是最小化 $E[n]$ 得到的}；\textbf{难点：$E[n]$ 里有一块（交换关联）解不出}。
+\end{say}
+
+% ===== SLIDE 3 =====
+\section{对角化和 SCF 迭代}\label{sec:s3}
+
+\begin{say}{Kohn–Sham 的把戏（接上一页）}
+真实电子互相纠缠，算不动。Kohn 和 Sham 1965 年的办法很聪明：\textbf{假装电子互不理睬}，再给它们配一根“等效指挥棒”势 $v_{\text{KS}}$，让假装出来的排布恰好等于真实排布。
+
+“互不理睬”为什么就简单？因为不相互作用时，每个电子可以独立待在自己的轨道里，一个 $N$ 电子问题就拆成 $N$ 个单电子问题。这个假系统满足 Kohn--Sham 方程：
+\begin{equation}
+\Big(-\tfrac{1}{2}\nabla^2 + v_{\text{KS}}(\mathbf r)\Big)\,\varphi_p(\mathbf r) = \varepsilon_p\,\varphi_p(\mathbf r),
+\qquad
+n_{\text{out}}(\mathbf r) = \sum_p f_p\,|\varphi_p(\mathbf r)|^2 .
+\end{equation}
+左边括号里 $-\frac12\nabla^2$ 是动能，$v_{\text{KS}}$ 是那根指挥棒；$\varphi_p$ 是第 $p$ 条轨道，$\varepsilon_p$ 是它的能量。第二行是把所有轨道平方、按占据数加起来，得到密度。
+
+指挥棒 $v_{\text{KS}}$ 是三块相加：
+\begin{equation}
+v_{\text{KS}} = v_{\text{ext}} + v_{\text{H}} + v_{\text{xc}},
+\end{equation}
+分别是：原子核的吸引（已知输入）、电子之间互斥的 Hartree 势、剩下解不出的交换关联势。\textbf{最关键一点：$v_{\text{KS}}$ 本身依赖密度 $n$}——因为后面两项都是 $n$ 的泛函。这个“依赖自己”，就把它变成了一个不动点问题。
+
+\textbf{什么是对角化？}第一行那个方程，就是“找矩阵的特征值和特征向量”：把算子作用在一个特殊形状上，结果只是把它放大一个倍数、方向不变。把所有这样的形状找出来，复杂矩阵就变成只有对角线上有数的简单矩阵。对一个 $K\times K$ 的矩阵做完整对角化，经典算法代价是 $O(K^3)$，而基的大小 $K$ 随电子数 $N$ 线性增长，所以是 \hl{$O(N^3)$}。
+
+\textbf{SCF 迭代是什么？}就是解那个不动点“猜一个密度 → 建指挥棒 → 对角化 → 叠出新密度 → 混合 → 再来”的循环，直到新旧密度一样：
+\begin{equation}
+n = \mathcal G\big(v_{\text{KS}}[n]\big),
+\qquad
+n^{(i+1)} = (1-\alpha)\,n^{(i)} + \alpha\, n_{\text{out}}^{(i)} .
+\end{equation}
+那个加权平均 $\alpha$ 叫混合，作用是“步子别迈太大，别震荡发散”。
+
+\textbf{瓶颈在哪？}循环里每一步算一遍成本：建 Hartree 势 $O(N_g\log N_g)$、建 XC 势基本线性、混合线性——\hl{只有对角化是 $O(N^3)$}。而且它是\textbf{每一轮}都要做一次。所以整轮 DFT 的成本 $\approx$ （$O(N^3)$ 对角化）$\times$（几十轮 SCF）。体系大 10 倍，对角化贵 1000 倍——这就是几十年的天花板。
+\end{say}
+
+\begin{say}[title={一句话收（过渡到下一页）}]
+所以整篇论文的靶子很清楚：\textbf{把“输入指挥棒 $v_{\text{KS}}$ → 输出密度 $n_{\text{out}}$”这一步（也就是对角化）用一个便宜的东西替掉，其余全保留。}问题是——\hl{替谁、学哪个映射？}下一页。
+\end{say}
+
+% ===== SLIDE 4 =====
+\section{消灭对角化这一瓶颈：学习哪一步？}\label{sec:s4}
+
+\begin{say}{三种候选，本文选哪个}
+“去掉对角化”其实有三种不同的学法。这是这篇论文最核心的判断，我花点时间讲。
+
+先立住前提：对角化这一步，本身就是一个\textbf{“指挥棒 $v_{\text{KS}}$ → 密度 $n_{\text{out}}$（外加动能 $T_s$）”的算子}，论文记作 $\mathcal G_{\text{KS}}$。所以“去对角化” = “找个神经网络 $F_\theta$ 替掉它”。悬念在于：这个替法有三种，选错了整个自洽就发散。
+
+\textbf{思路 A：学“逆映射”。}传统免轨道 DFT 是直接对密度做能量最小化，它要学的是\hl{“密度 → 指挥棒”这个反方向}，也就是把前向算子求逆。
+为什么“求逆”是病？把前向响应算子 $\chi_s$（指挥棒动一点，密度响应多少）对角化，它有很多\textbf{弱模态}——特征值 $\lambda$ 很小。前向走 $\chi_s$：误差按 $\lambda$ 缩放，弱模态把误差\hl{压扁}；求逆走 $\chi_s^{-1}$：弱模态变成 $1/\lambda$，误差被\hl{放大好几个数量级}。这就是“求逆一个近乎奇异的矩阵”——条件数爆炸，数值上很脆。实测（论文 Fig.2）：同数据同骨干，前向 100\% 收敛，逆的几轮就死。
+
+\textbf{思路 B：直接一步到位。}干脆不迭代，学 $v_{\text{ext}} \to n^\star$，一次前向给出收敛后的基态密度。毛病是它把\hl{“一整个又长又弯的 SCF 轨迹”压缩进一次预测}。分布内（小分子）其实不差；但换到更大、更陌生元素的分子，它就把整条轨迹外推崩了（QMugs 上 9.97\% vs 前向 2.23\%）。
+
+\textbf{思路 C（本文）：学前向 $v_{\text{KS}} \to n_{\text{out}}$。}它卡在 A 和 B 中间，把两边的毛病都避开：
+\begin{itemize}[leftmargin=*]
+  \item \hl{好条件}：不要求逆，直接学那个“弱模态压误差”的前向方向；
+  \item \hl{不挑 XC 泛函}：它只管“给定这个指挥棒，单电子解是什么”，不管这根棒是被 PBE 还是 PBEsol 造的 → 换泛函不用重训；
+  \item \hl{误差自纠}：嵌在 SCF 里，中间错了下一轮重算 + 混合拉回来；
+  \item \hl{省数据}：每条参考 SCF 轨迹的\textbf{每一轮}都是它的精确样本，只用 5.95 万个标签就够。
+\end{itemize}
+CS 的类比：直接预测是 one-shot 出最终答案；前向 KS 像 chain-of-thought——让物理迭代显式存在，模型只负责每步里最简单的子运算。
+
+所以这篇论文\hl{没发明新物理}，它赢在判断对了“该学哪一个映射”，并用\textbf{同数据、同骨干、只换目标}的控制实验证明了前向 KS 映射是唯一既稳、又不挑泛函、又省数据、又能自纠的那个。
+\end{say}
+
+% ===== SLIDE 5 =====
+\section{为什么用神经算子，为什么选 FNO}\label{sec:s5}
+
+\begin{say}{形式匹配 + 卷积定理}
+先说“神经算子”。普通神经网络学的是“固定长度向量 → 固定长度向量”，输入维度是写死的。但我们要预测的对象是一张 3 维场，而且\textbf{网格大小会随体系变}——小分子 $20^3$、大晶胞 $60^3$。固定维度的网络就不合适了。
+
+神经算子学的是“函数空间 → 函数空间”：输入一个场，输出一个场，\hl{参数不随网格大小变}。而 KS 问题本来就长这样——输入指挥棒 $v_{\text{KS}}(\mathbf r)$ 这个场，输出密度 $n_{\text{out}}(\mathbf r)$ 这个场。\textbf{形式匹配}，这就是用神经算子的第一层理由（页面上写的）。
+
+那为什么在神经算子里选 \hl{FNO}（Fourier Neural Operator）？因为 KS 里最强的非局部性来自 Hartree 势——它是 $1/r$ 长程相互作用，本质是一个\textbf{卷积}：
+\begin{equation}
+v_{\text H}(\mathbf r) = \int \frac{n(\mathbf r')}{|\mathbf r-\mathbf r'|}\,d\mathbf r' = (g*n)(\mathbf r),\quad g(\mathbf r)=\frac{1}{r}.
+\end{equation}
+卷积在实空间是“每个点跟每个点算”，$O(N_g^2)$，跟 attention 一个毛病。但\textbf{谱方法（在频域操作）天生擅长这种全局非局部的映射}——而 KS 势到密度的关系恰恰是强非局部的（一个点的势影响整个密度）。这就是选 FNO 的根本原因。
+
+下面把卷积定理讲透，这是 FNO 的地基。定理一句话：\hl{实空间的卷积 = 频域的逐点相乘}。
+\begin{equation}
+\widehat{(g*n)}(\mathbf k) = \hat g(\mathbf k)\cdot \hat n(\mathbf k).
+\end{equation}
+证明就两个小动作：
+\begin{equation}
+\begin{aligned}
+F[g*n](\mathbf k)
+&= \int\!\int g(\mathbf r-\mathbf r')\,n(\mathbf r')\,e^{-i\mathbf k\cdot\mathbf r}\,d\mathbf r'\,d\mathbf r\\
+&\xrightarrow{\ \mathbf u=\mathbf r-\mathbf r'\ } \iint g(\mathbf u)\,n(\mathbf r')\,e^{-i\mathbf k\cdot(\mathbf u+\mathbf r')}\,d\mathbf u\,d\mathbf r'\\
+&= \iint g(\mathbf u)\,n(\mathbf r')\,\underbrace{e^{-i\mathbf k\cdot\mathbf u}\,e^{-i\mathbf k\cdot\mathbf r'}}_{\text{指数相加}\to\text{指数相乘}}\,d\mathbf u\,d\mathbf r'\\
+&= \Big[\int g(\mathbf u)e^{-i\mathbf k\cdot\mathbf u}d\mathbf u\Big]\Big[\int n(\mathbf r')e^{-i\mathbf k\cdot\mathbf r'}d\mathbf r'\Big]
+= \hat g(\mathbf k)\cdot\hat n(\mathbf k).
+\end{aligned}
+\end{equation}
+就是：\hl{换元把“位置的差”变成“和”，指数律把“和”变回“乘”}，双重积分裂成两个单积分相乘。
+
+再给一个更透的理解：拿一根纯正弦波 $e^{i\mathbf q\cdot\mathbf r}$ 去跟 $g$ 卷积，出来还是它自己，只被放大 $\hat g(\mathbf q)$ 倍、不掺别的频率——\hl{正弦波就是卷积的“特征波”}。所以傅里叶基把那个 $O(N_g^2)$ 的稠密矩阵\textbf{对角化}成“每根频率各乘一个数”。对 $1/r$ 核，那个数是 $\hat g(\mathbf k)=4\pi/|\mathbf k|^2$：低频放大、高频压平——“长程 = 低频被放大”。
+
+最后 FFT 是干嘛的？离散网格上卷积是个循环矩阵，它恒被 DFT 对角化：$C = F^\dagger\,\mathrm{diag}(\hat g)\,F$。算卷积 = “FFT 进对角基 → 乘对角线 → iFFT 回来”，从 $O(N_g^2)$ 降到 \hl{$O(N_g\log N_g)$}。
+\end{say}
+
+% ===== SLIDE 6 =====
+\section{FNO 一层到底在做什么}\label{sec:s6}
+
+\begin{say}{四步走一遍}
+FNO 就是“把卷积定理做成一层可学习的网络”。每层四步，输入是场 $z(\mathbf r)$（这里就是指挥棒 $v_{\text{KS}}$）：
+\begin{equation}
+\begin{aligned}
+&\text{(1) FFT：} && z(\mathbf r)\to \hat z(\mathbf k)\quad\text{（拆成正弦波，进频域）}\\
+&\text{(2) 谱卷积（全局）：} && \hat z_{\text{out}}(\mathbf k) = W_\theta(\mathbf k)\cdot\hat z(\mathbf k)\quad\text{（只动低频，每根波各乘一个可学习数）}\\
+&\text{(3) iFFT：} && \hat z_{\text{out}}(\mathbf k)\to z_{\text{local}}(\mathbf r)\quad\text{（拼回空间）}\\
+&\text{(4) 逐点 MLP + 残差（局部）：} && z'(\mathbf r) = z(\mathbf r) + \mathrm{MLP}\big([z_{\text{local}}(\mathbf r),\, z(\mathbf r)]\big)
+\end{aligned}
+\end{equation}
+逐句说：
+\begin{itemize}[leftmargin=*]
+  \item 第 (1)(3) 步就是 FFT / iFFT，进频域再回实空间；
+  \item 第 (2) 步\textbf{谱卷积 = 全局混合}：像 attention 的全局 token，但代价是 FFT 级（$O(N\log N)$ 而非 $O(N^2)$）。$W_\theta(\mathbf k)$ 就是“可学习的频域权重”。\hl{只动低频}，因为全局物理在低频段，高频留给第 (4) 步；
+  \item 第 (4) 步\textbf{逐点 MLP = 局部混合 + 非线性}：每个网格点独立过一个小 MLP，只看自己、不看隔壁，处理局部细节；加回原 $z$ 是残差，保证堆很多层不崩、只学“该修的那点”。
+\end{itemize}
+堆 $L$ 层（页面上写的 Lifting → Fourier Layers 循环堆叠 → Projection），全局 + 局部交替，就够表达“指挥棒 → 密度”这个复杂映射。
+
+一句话总结：\hl{FNO 一层 = 先用傅里叶调几根大波的音量（全局协调），再让每个格子各自精修（局部细节），最后把原图加回来打底（残差）。}
+\end{say}
+
+% ===== SLIDE 7 =====
+\section{架构创新：域不变且严格 SE(3) 等变的 FNO}\label{sec:s7}
+
+\begin{say}{两个改造}
+标准 FNO 有两个毛病，这篇论文各改了一个，这是它的架构贡献。
+
+\textbf{第一，域不变（domain-invariant）——解决“不同尺寸共用一个模型”。}
+标准 FNO 的滤波器 $W_\theta$ 是\hl{“固定形状的矩阵，记住了固定频率的序号”}：它定义在某个固定大小域的频率离散格点上。域一大一小，频率格点就变，$W_\theta$ 也得重学——所以不同尺寸的体系没法共用一个模型。
+
+本文改法：模型\hl{不直接学矩阵元素，而是学一个关于真实物理倒空间波矢模长 $|\mathbf k|$ 的连续函数}（径向分解）：
+\begin{equation}
+W_\theta(\mathbf k)\ \longrightarrow\ W_\theta\big(|\mathbf k|\big).
+\end{equation}
+这样无论域多大，都在“物理半径 $|\mathbf k|$”上采样同一个学到的滤波器 → 一套参数横跨分子（小域）和晶体（大域）。类比：标准 FNO 像“按钢琴的键位弹琴”，换钢琴要重学；本文像“按音高分组”，不管钢琴多大，低音区/中音区/高音区各一套参数。
+
+\textbf{第二，严格 SE(3) 等变——解决“对称性靠数据堆”。}
+页面上那两句合起来：径向对称的滤波器 + 球面模态截断，让谱卷积具备\hl{旋转等变}；再加上逐点 MLP 和周期边界 FFT 天然具备的\hl{平移等变}；合起来就是完整的 \hl{SE(3) 刚体运动等变}：
+\begin{equation}
+\mathcal G\big(v_{\text{KS}}(\mathbf R\,\mathbf r+\mathbf t)\big) = \mathcal G(v_{\text{KS}})\big(\mathbf R\,\mathbf r+\mathbf t\big),\quad \forall\,\mathbf R\in SO(3),\,\mathbf t\in\mathbb R^3.
+\end{equation}
+意思是：把分子整体转一下或挪一下，预测的密度就跟着转/挪，\hl{不靠数据增强}。
+\begin{itemize}[leftmargin=*]
+  \item “截断做成圆球”：严格只保留最大频域半径以内的波，把方盒子切成正圆球，消除了网格轴向的人造各向异性（不然沿 $x$ 轴和沿对角线的波会被区别对待）；
+  \item “刚好不需要学习方向性”：方向性交给残差网络去拟合，谱部分只管半径上的径向结构。
+\end{itemize}
+
+那页面上那句“\hl{拟合能力下降也无所谓，交给 SCF 兜底}”是什么意思？等变是一种“结构先验”——你把对称性写进网络，网络就\textbf{不用靠数据去学对称性}，代价是单层的拟合灵活性略降。但因为我们把 FNO 嵌在 SCF 迭代里，中间某层拟合得不完美，下一轮会重算、混合会拉回来——\hl{物理迭代给模型的结构先验兜了底}。所以“等变带来的这点拟合力损失”是可接受的。
+\end{say}
+
+% ===== SLIDE 8 =====
+\section{最终效果}\label{sec:s8}
+
+\begin{say}{把数字念出来}
+最后说效果。这张页面上两句 + 一张标度图，对应三件事：
+
+\textbf{一，超大体系单 GPU。}模型在\hl{单块 NVIDIA B300 GPU} 上，成功自洽收敛了含 \hl{8,250 个镁原子（82,500 个价电子）}的锥面螺位错体系。作个对比：同一个类位错问题，2019 年拿 Gordon Bell 提名的 DFT-FE 算法，6,164 个原子就要 56 轮 SCF × 1,300 节点（7,800 块 V100）；最大的 10,508 原子要 3,800 节点（22,800 GPU）才跑一轮。这篇用一块 GPU 收敛了同量级的体系，打破了传统 DFT 动辄几千块 GPU 的算力壁垒。
+
+\textbf{二，准线性标度（就是那张图）。}横轴是网格点数 $N_g$，纵轴是每轮 SCF 的时间，log-log 轴。传统 Quantum ESPRESSO 拟合出来是 $t\propto N_g^{3.37}$（≈立方），Kohn--Sham FNO 是 \hl{$t\propto N_g^{1.03}$（≈线性）}。体系大一倍，QE 贵约 8 倍，FNO 只贵约 2 倍——\hl{这才是能推到介观尺度的关键}。
+
+\textbf{三，精度没掉。}换到收敛密度后做一次固定密度的 post-SCF 对角化，能带、带隙、DOS、状态方程这些观测量都接近 KS-DFT 精度：比如 CaTiO$_3$ 带隙 DFT 2.573 eV、FNO 2.469 eV；金属 Sr$_3$SnO 总能量差 2.29 meV/atom。而且\hl{换 XC 泛函不用重训}（PBE→PBEsol，平衡体积差 0.61\%）。
+
+一句话收尾：\hl{这篇论文没发明新物理，它是在 DFT 的自洽循环里，精准地把最贵的那一步（对角化）换成一个好条件、不挑泛函、省数据、能自我纠错的前向神经算子，}从而第一次让免轨道的 SCF 在分子、金属、绝缘体上都收敛，并在单块 GPU 上推到 8 万电子。
+
+我讲完了，谢谢大家。
+\end{say}
+
+\begin{say}[title={Q\&A 备用（如果被问到）}]
+\textbf{Q：为什么最后还要做一次对角化？不是收敛了吗？}\quad 收敛的是\textbf{密度} $n^\star$，但能带、总能量住在\textbf{轨道/特征值}那一层。FNO 只产密度，要读能级得拿收敛密度再解一次 KS 方程（post-SCF），这次是\textbf{一次性}的，不是循环里那种反复做的，所以便宜。
+
+\textbf{Q：FNO 怎么处理 3D 场？和普通网络差在哪？}\quad 输入是 $N_x\times N_y\times N_z$ 的 3D 数组。普通 MLP 把它拉平、每个点连每个点（$O(N^2)$ 且无空间先验）；CNN 用滑动小窗只看邻居（要看全局得堆很多层）；attention 每点跟每点算权重（$O(N^2)$）。\hl{FNO 是 3D FFT 跳到频域、每根低频波各自用一个可学习矩阵处理、再 iFFT 回来}——信息混合发生在\textbf{频率空间}不在空间点之间，$O(N\log N)$，而且 $1/r$ 卷积本来就在频域是逐点乘，结构天然匹配。
+
+\textbf{Q：为什么不能写成一个矩阵（像四元数那样自动一致）？}\quad 可以，就是\hl{密度矩阵 $\rho$}。$n_{\text{out}}=\rho(\mathbf r,\mathbf r)$ 读对角线，$T_s=\operatorname{Tr}[\hat T\rho]$ 读迹，一致性由 $\rho$ 的代数（幂等、对易 $\hat h_{\text{KS}}$）自动保证，像四元数“轴+角内禀”。但 $\rho$ 是 $N_g^2$ 的矩阵，“对角化它”就是 $O(N_g^3)$——\hl{等于把要去掉的对角化又搬回来了}。所以本文的取舍是：只输出对角线 $n(\mathbf r)$（$O(N_g\log N_g)$），一致性暂时用一次精确 post-SCF 解顶上，彻底免轨道是下一步（学前向动能 $T_s$）。
+\end{say}
+
+\end{document}
