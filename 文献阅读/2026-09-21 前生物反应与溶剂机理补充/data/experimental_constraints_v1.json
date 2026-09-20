@@ -1,0 +1,92 @@
+{
+  "status": "literature extraction, not new experimental or computational results",
+  "common_conditions": {
+    "donor": "L-alanine ethyl thioester (Ala-SEt)",
+    "donor_mM": 200,
+    "acceptor_mM": 20,
+    "pH": 6.5,
+    "time_h": 24,
+    "temperature": "room temperature, as reported",
+    "procedure": "General Procedure C and Table 6; see per-record buffer notes and source discrepancies",
+    "readout": "1H NMR endpoint product yields, relative to nucleoside input",
+    "source_doi": "10.1038/s41586-025-09388-y",
+    "source_location": "Supplementary Table 6, printed page 55",
+    "internal_standard": "pentaerythritol, 10 mM"
+  },
+  "records": [
+    {
+      "id": "A",
+      "acceptor": "adenosine",
+      "paper_id": "16A",
+      "total_percent": 23,
+      "three_prime_percent": 15,
+      "two_prime_percent": 5,
+      "two_three_bis_percent": 2,
+      "five_prime_percent": "<1",
+      "role": "reference; multiple product channels",
+      "buffer_note": "Figure 50 does not specify MES; absence of a note is not proof that MES was absent."
+    },
+    {
+      "id": "OMe2",
+      "acceptor": "2-prime-O-methyladenosine",
+      "paper_id": "25A",
+      "total_percent": 23,
+      "three_prime_percent": 22,
+      "two_prime_percent": "no OH moiety",
+      "two_three_bis_percent": "not applicable",
+      "five_prime_percent": 1,
+      "role": "adjacent oxygen retained; adjacent OH proton removed",
+      "buffer_note": "Corresponding NMR figure states MES buffer, but does not specify its concentration."
+    },
+    {
+      "id": "deoxy2",
+      "acceptor": "2-prime-deoxyadenosine",
+      "paper_id": "21A",
+      "total_percent": 1,
+      "three_prime_percent": 1,
+      "two_prime_percent": "no OH moiety",
+      "two_three_bis_percent": "not applicable",
+      "five_prime_percent": "not detected",
+      "role": "adjacent oxygen removed",
+      "buffer_note": "Corresponding NMR figure states MES buffer, but does not specify its concentration."
+    },
+    {
+      "id": "OMe3",
+      "acceptor": "3-prime-O-methyladenosine",
+      "paper_id": "24A",
+      "total_percent": 19,
+      "three_prime_percent": "no OH moiety",
+      "two_prime_percent": 18,
+      "two_three_bis_percent": "not applicable",
+      "five_prime_percent": 1,
+      "role": "secondary corroborating structural pair",
+      "buffer_note": "Corresponding NMR figure states MES buffer, but does not specify its concentration."
+    },
+    {
+      "id": "deoxy3",
+      "acceptor": "3-prime-deoxyadenosine",
+      "paper_id": "22A",
+      "total_percent": 10,
+      "three_prime_percent": "no OH moiety",
+      "two_prime_percent": 9,
+      "two_three_bis_percent": "not applicable",
+      "five_prime_percent": 1,
+      "role": "secondary corroborating structural pair",
+      "buffer_note": "Corresponding NMR figure states MES buffer, but does not specify its concentration."
+    }
+  ],
+  "interpretation_limits": [
+    "Endpoint yields are not elementary reaction rate constants or direct activation free-energy labels.",
+    "The adenosine total includes several positions and bis-acylation; it is not a 3-prime-specific kinetic measurement.",
+    "Different mechanisms may yield the same endpoint through different formation and degradation rates.",
+    "No uncertainty estimates or initial rates are supplied by this table.",
+    "Original spectra and structure drawings remain authoritative; records require independent review before use as model labels.",
+    "Buffer identity/concentration and water isotope proportions are not fully reconciled across source locations; these records are not verified identical-condition kinetic measurements."
+  ],
+  "revision": "1.1; independently checked against SI Table 6 and structure drawings, 2026-09-21",
+  "source_discrepancies": [
+    "3-prime-deoxyadenosine 22A: structural overview on printed p54 gives 11%; Table 6 on p55 gives 10% (9% 2-prime + 1% 5-prime). Values here follow Table 6.",
+    "General Procedure C specifies degassed H2O/D2O 98:2, whereas relevant NMR captions specify 9:1. This extraction does not resolve the difference."
+  ],
+  "independent_review": "Chemical identities and all five Table 6 yield records independently verified by a second reading agent; experimental source ambiguities remain explicitly recorded."
+}
