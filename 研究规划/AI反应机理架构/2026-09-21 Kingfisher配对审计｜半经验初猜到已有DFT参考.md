@@ -2,6 +2,8 @@
 
 更新：2026-09-21。来源：[Kingfisher supporting data v1.1](https://doi.org/10.5281/zenodo.15297813)，元数据许可CC-BY-4.0。下载了28.5 MB的甲醛—水数据库成员，通过HTTP Range、ZIP成员CRC和SHA256校验；没有下载整个3.7 GB归档，**没有核验全归档MD5**。没有执行归档的量化启动脚本。
 
+**后续实跑更新**：下文是配对审计阶段的合同记录。50组已导出，源设置的三个原子索引获得对应旁证，并按来源/近重复形成21组；距离修正对照已跑完。环境收益未通过不确定性条件，后续端点审计发现配对事件不一定可比。当前决定及待办以[KINGFISHER_PILOT_RESULTS.md](KINGFISHER_PILOT_RESULTS.md)为准，不将下文的修正任务设想当作已成立的科学假设。
+
 完整审计：`reports/kingfisher/ch2o-v1/`；最新配对审计：`reports/kingfisher/ch2o-pairs-v2/`。v1配对结果保留，v2加强了频率属性归属和非空端点校验，计数未改变。
 
 ## 已获得的证据
